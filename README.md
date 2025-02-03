@@ -1,3 +1,83 @@
+# This is a customized version of the aptaflow pipeline
+
+[Aptaflow-pipeline](https://github.com/hovercat/aptaflow)
+
+The following modifications have been made in order to be able to run it properly on the inhouse cluster and generated data.
+
+## Lastest versions of packages are installed
+
+```
+# Adding of necessary channels
+conda config --add channels bioconda
+conda config --add channels conda-forge
+conda config --add channels r
+
+# Creating conda environment
+conda create --name aptaflow
+
+# Install packages
+conda install -c bioconda -c conda-forge nextflow cutadapt fastp multiqc pandas pear
+conda install -c r r-base r-dplyr r-tidyr r-ggplot2 r-xlsx r-argparse r-showtext r-openxlsx  bioconductor-biostrings
+```
+
+* Add flash (instead of fastp) for merging. Fastp crashes with inhouse data, flash does work and can also be processed by MultiQC (as opposed to Pear)
+
+* Use openxlsx instead of r-xlsx for reporting (which crashes wrt missing java dependency)
+   ```
+   conda install  -c bioconda -c conda-forge r-openxlsx
+   ```
+
+* Add biostrings to environment instead of dynamic install in analyse_selex_composition.r script
+   ```
+   conda install -c bioconda bioconductor-biostrings
+   ```
+
+* Modify process merged_fastq_to_fasta (adjust header lines, was at least required for our inhouse data?)
+   ```
+   sed -n 'p;n;p;n;n' selex_round.fastq | sed 's/@M/>M/g' > ${round_id}.fasta
+   ```
+   >
+   ```
+   sed -n 'p;n;p;n;n' selex_round.fastq | sed 's/@/>/g' > ${round_id}.fasta
+   ```
+   
+* Adjust process trim_selex_primers so that adapter is not forced to be directly at the start (though might be too lenient now?)
+   ```
+   -g ^${params.primers.p5_f}...${params.primers.p3_f} \
+   -G ^${params.primers.p5_r}...${params.primers.p3_r}  \
+   ```
+   >
+   ```
+   -g ${params.primers.p5_f}...${params.primers.p3_f} \
+   -G ${params.primers.p5_r}...${params.primers.p3_r}  \
+   ```
+   
+## Run pipeline
+
+Fastqs should be unzipped and named as follows:
+
+```
+ROUND_SAMPLE_*_R1_001.fastq
+ROUND_SAMPLE_*_R2_001.fastq
+```
+
+Where ROUND is defined in the config (R01...R10 for example)
+
+```
+outdir=/path/to/outdir
+/path/to/22.x/nextflow /path/to/aptaflow_uses/aptaflow.nf \
+			-c ${outdir}/fle10x.config \
+			--merge_mode "flash" \
+			--selex_name "<selex_run_name>" \
+			--input.raw_reads "/path/to/fastq/*_{R1,R2}_001.fastq" \
+			--output.out_dir ${outdir} \
+			-w ${outdir}/work/ \
+			-resume
+```
+   
+   
+# Original readme below...   
+
 More stable/robust pipeliens doing the things below are here:
 - Data Preprocessing: https://github.com/hovercat/selex-ngs-prep
 - Basic Analysis: https://github.com/hovercat/selex-assess
