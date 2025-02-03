@@ -4,7 +4,7 @@ library("argparse")
 library("dplyr")
 library("tools")
 library("tidyr")
-library("xlsx")
+library("openxlsx")
 
 # Parameter validation
 args_parser = ArgumentParser(
@@ -18,13 +18,7 @@ args <- args_parser$parse_args(c("-i", "rpm.csv"))
 
 
 # EXCEL Workbook
-wb <- createWorkbook(type="xlsx")
-
-style_title = CellStyle(wb) + Font(wb, isBold=TRUE, heightInPoints = 11)
-style_text = CellStyle(wb) + Font(wb, isBold=TRUE, heightInPoints = 10)
-style_colnames = CellStyle(wb) + Font(wb, isBold=TRUE, heightInPoints = 10)
-style_data = CellStyle(wb) + Font(wb, name="Courier New", heightInPoints = 10)
-style_number = CellStyle(wb, dataFormat=DataFormat("0")) + Font(wb, heightInPoints = 10) # no decimal point
+wb <- createWorkbook()
 
 # Data input
 df_rpm <-  read.csv(args$in_rpm_csv, sep=";", header=TRUE)
@@ -43,39 +37,8 @@ for (round_name in round_names) {
   df_top_1000$"analysed as" <- " "
   
   # Fill sheet with info
-  sheet <- createSheet(wb, sheetName=round_name)
-  title_row <- createRow(sheet, rowIndex=1)
-  title_cell <- createCell(title_row, colIndex=1)
-  setCellValue(title_cell[[1,1]], paste("Top ", args$top, " reads, Illumina, Round ", round_name))
-  setCellStyle(title_cell[[1,1]], style_title)
-  
-  empty_row = createRow(sheet, rowIndex=2)
-  
-  round_specific_row = createRow(sheet, rowIndex = 3)
-  round_name_cell = createCell(round_specific_row, colIndex = 1)
-  round_total_cell = createCell(round_specific_row, colIndex = 2)
-  
-  setCellValue(round_name_cell[[1,1]], round_name)
-  setCellStyle(round_name_cell[[1,1]], style_text)
-  setCellValue(round_total_cell[[1,1]], paste(sum(df_round$count), "reads", sep=" "))
-  setCellStyle(round_total_cell[[1,1]], style_text)
-  
-  setColumnWidth(sheet, 1, 7)
-  setColumnWidth(sheet, 2, 8)
-  setColumnWidth(sheet, 3, 8)
-  setColumnWidth(sheet, 4, 40)
-  setColumnWidth(sheet, 5, 15)
-  
-  addDataFrame(
-    df_top_1000, 
-    sheet,
-    col.names = TRUE,
-    row.names = FALSE,
-    colnamesStyle = style_colnames,
-    startRow=4,
-    startCol=1,
-    colStyle = list(`3`=style_number, `4`=style_data, `5`=style_data)
-  )
+  sheet = addWorksheet(wb, sheetName = round_name, gridLines = FALSE)
+  writeDataTable(wb, sheet = round_name, df_top_1000, startCol = "A", startRow = 1)
 
 }
 

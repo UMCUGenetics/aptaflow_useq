@@ -3,6 +3,12 @@
 
 // Define output directory
 def exp_dir = null
+
+def merge_mode = null
+if (params.merge_mode != null){
+    merge_mode = params.merge_mode
+}
+
 // Check if an output dir name is provided in the config, otherwise use the selex_name instead.
 if (params.output.out_dir == null) {
     today = new Date().format("yyyy-MM-dd")
@@ -71,7 +77,7 @@ def cutadapt_saveAs(f, rid) {
 
 process trim_selex_primers {
     publishDir exp_data_dir.getPath() + "/" + dir_trim, \
-        mode: 'symlink', \
+        mode: 'copy', \
         overwrite: true, \
         pattern: "*.fastq", \
         saveAs: { fn -> cutadapt_saveAs(fn, read_id) }
@@ -111,8 +117,8 @@ process trim_selex_primers {
             \
             --minimum-length $min_untrimmed \
             --maximum-length $max_untrimmed \
-            -g ^${params.primers.p5_f}...${params.primers.p3_f} \
-            -G ^${params.primers.p5_r}...${params.primers.p3_r}  \
+            -g ${params.primers.p5_f}...${params.primers.p3_f} \
+            -G ${params.primers.p5_r}...${params.primers.p3_r}  \
             \
             --untrimmed-output no_adapters_found.fwd.fastq \
             --untrimmed-paired-output no_adapters_found.rev.fastq \
@@ -157,13 +163,13 @@ process trim_multiqc {
 
 process filter_reads_by_read_quality {    
     publishDir exp_data_dir.getPath()  + "/" + dir_filter, \
-        mode: 'symlink', \
+        mode: 'copy', \
         overwrite: true, \
         pattern: "filtered.*.fastq", \
         saveAs: { fn -> "${read_id}.${fn}" }
         
     publishDir exp_data_dir.getPath()  + "/" + dir_filter + "/discarded/", \
-        mode: 'symlink', \
+        mode: 'copy', \
         overwrite: true, \
         pattern: "tfm_bad_reads.fastq", \
         saveAs: { fn -> "${read_id}.fwd.rev.bad_quality.fastq" }
@@ -213,13 +219,13 @@ process filter_multiqc {
 // ===============================================================
 process merge_reads {    
     publishDir exp_data_dir.getPath() + "/" + dir_merge, \
-        mode: 'symlink', \
+        mode: 'copy', \
         overwrite: true, \
         pattern: "merged.fastq", \
         saveAs: { fn -> "${read_id}.fastq" }
     
     publishDir exp_data_dir.getPath()  + "/" + dir_merge + "/discarded/", \
-        mode: 'symlink', \
+        mode: 'copy', \
         overwrite: true, \
         pattern: "*disc*", \
         saveAs: { fn -> "${read_id}.${fn}" }
@@ -230,16 +236,26 @@ process merge_reads {
         tuple read_id, file("merged.fastq") into ch_merged
         tuple read_id, file("discarded.fwd.fastq"), file("discarded.rev.fastq") into ch_fastp_merging_discarded
         tuple read_id, file("${read_id}.merging.fastp.json") into ch_fastp_merging_log
+        tuple read_id, file("${read_id}.flash.log") into ch_fastp_merging_log
         tuple val(read_id), file("merged.fastq") into trace_read_processing_merge
     script:
         """
-        mkdir ./fastp_meta/
-        fastp -i ${read_id}.fastq -I ${read_id}.rev.fastq \
-            -o discarded.fwd.fastq -O discarded.rev.fastq \
-            --merge \
-            --merged_out=merged.fastq \
-            --disable_adapter_trimming \
-            --json=${read_id}.merging.fastp.json
+        if [[ "$merge_mode" == "flash" ]]; then
+             flash ${read_id}.fastq ${read_id}.rev.fastq 2>&1 | tee ${read_id}.flash.log
+             mv out.extendedFrags.fastq merged.fastq
+             mv out.notCombined_1.fastq discarded.fwd.fastq
+             mv out.notCombined_2.fastq discarded.rev.fastq
+             touch ${read_id}.merging.fastp.json
+         else
+             mkdir ./fastp_meta/
+             fastp -i ${read_id}.fastq -I ${read_id}.rev.fastq \
+                -o discarded.fwd.fastq -O discarded.rev.fastq \
+                --merge \
+                --merged_out=merged.fastq \
+                --disable_adapter_trimming \
+                --json=${read_id}.merging.fastp.json
+             touch ${read_id}.flash.log
+        fi
 
         lines_merged=\$(cat merged.fastq | wc -l)
         reads_merged=\$((lines_merged/4))
@@ -342,7 +358,7 @@ process merged_fastq_to_fasta {
 
     script:
     """
-        sed -n 'p;n;p;n;n' selex_round.fastq | sed 's/@M/>M/g' > ${round_id}.fasta
+        sed -n 'p;n;p;n;n' selex_round.fastq | sed 's/@/>/g' > ${round_id}.fasta
     """
 }
 
