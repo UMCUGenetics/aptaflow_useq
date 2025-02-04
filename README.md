@@ -2,6 +2,8 @@
 
 [Aptaflow-pipeline](https://github.com/hovercat/aptaflow)
 
+A pipeline for processing HT-Selex NGS data...
+
 The following modifications have been made in order to be able to run it properly on the inhouse cluster and generated data.
 
 ## Lastest versions of packages are installed
